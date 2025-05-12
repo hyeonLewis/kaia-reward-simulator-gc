@@ -12,37 +12,50 @@ MIN_STAKE = 5_000_000
 MAX_STAKE = 500_000_000
 MAX_TOTAL_STAKE = 3_000_000_000
 
-st.title("Validator Reward Distribution Simulator")
+# Staking distribution function
+def generate_staking_distribution(vn, spread, mode="normal"):
+    if mode == "kaia_style":
+        major_stakers = np.array([564_000_000, 289_000_000, 285_000_000, 135_000_000, 113_000_000, 100_000_000, 65_000_000, 52_000_000])
+        remaining = vn - len(major_stakers)
+        if remaining < 0:
+            st.error("Number of validators must be at least 8 for Kaia-style mode")
+            return major_stakers[:vn]
+        
+        # Remaining stakers between 5M and 50M (log uniform)
+        log_min = np.log10(MIN_STAKE)
+        log_max = np.log10(50_000_000)
+        small_stakers = np.power(10, np.random.uniform(log_min, log_max, remaining))
+        
+        staking_amounts = np.concatenate([major_stakers, small_stakers])
+    else:
+        # Normal spread logic
+        if spread == 0:
+            staking_amounts = np.full(vn, MIN_STAKE)
+        elif spread <= 33:
+            log_min = np.log10(50_000_000)
+            log_max = np.log10(MAX_STAKE)
+            staking_amounts = np.power(10, np.random.uniform(log_min, log_max, vn))
+        elif spread <= 66:
+            log_min = np.log10(MIN_STAKE)
+            log_max = np.log10(MAX_STAKE)
+            staking_amounts = np.power(10, np.random.uniform(log_min, log_max, vn))
+        else:
+            high = int(vn * 0.1)
+            low = vn - high
+            staking_amounts = np.array([MIN_STAKE] * low + [MAX_STAKE] * high)
+            np.random.shuffle(staking_amounts)
 
-# User Input
-st.sidebar.header("Simulation Parameters")
-vn = st.sidebar.slider("Validator Count (Vn)", min_value=1, max_value=100, value=10)
-spread = st.sidebar.slider("Staking Distribution Spread (0: Uniform ~ 100: Extreme)", min_value=0, max_value=100, value=50)
-proposer_ratio = st.sidebar.slider("Proposer Reward Ratio (%)", min_value=0, max_value=100, value=20)
+    # Cap total staking at 3B and ensure no validator drops below 5M after scaling
+    total_stake = staking_amounts.sum()
+    if total_stake > MAX_TOTAL_STAKE:
+        scaling_factor = MAX_TOTAL_STAKE / total_stake
+        staking_amounts *= scaling_factor
+        staking_amounts = np.clip(staking_amounts, MIN_STAKE, None)
 
-staker_ratio = 100 - proposer_ratio
+    return staking_amounts.astype(int)
 
-# Auto-generate Staking Distribution
-np.random.seed(42)
-spread_factor = np.interp(spread, [0, 100], [0, 5])  # 0이면 균등, 5면 극단
-raw_stakings = np.random.pareto(spread_factor, vn) if spread > 0 else np.ones(vn)
-scaled_stakings = MIN_STAKE + (raw_stakings / raw_stakings.max()) * (MAX_STAKE - MIN_STAKE)
-staking_amounts = np.clip(scaled_stakings, MIN_STAKE, MAX_STAKE)
-staking_amounts = np.sort(staking_amounts)
-
-# Limit Total Staking Sum
-total_stake = staking_amounts.sum()
-if total_stake > MAX_TOTAL_STAKE:
-    scaling_factor = MAX_TOTAL_STAKE / total_stake
-    staking_amounts *= scaling_factor
-    st.info(f"Total staking exceeds {MAX_TOTAL_STAKE:,} tokens, so it has been automatically scaled by {scaling_factor:.4f}.")
-
-staking_amounts = np.clip(staking_amounts, MIN_STAKE, MAX_STAKE)
-
-staking_amounts = staking_amounts.astype(int)
-
-# Calculate Function
-def calc_rewards(staking_amounts, proposer_ratio):
+# Reward calculation function
+def calc_rewards(staking_amounts, proposer_ratio, vn):
     effective_stakings = [max(0, s - MIN_STAKE) for s in staking_amounts]
     total_effective_stake = sum(effective_stakings)
 
@@ -66,9 +79,33 @@ def calc_rewards(staking_amounts, proposer_ratio):
     df = pd.DataFrame(results)
     return df
 
-df = calc_rewards(staking_amounts, proposer_ratio)
+# UI setup
+st.title("Validator Reward Simulator (Kaia-style & Custom Distribution)")
 
-# Output Results
+st.sidebar.header("Simulation Parameters")
+vn = st.sidebar.slider("Number of Validators (Vn)", min_value=8, max_value=100, value=20)
+spread = st.sidebar.slider("Staking Distribution Spread (0: Uniform ~ 100: Extreme Bimodal)", min_value=0, max_value=100, value=50)
+proposer_ratio = st.sidebar.slider("Proposer Reward Ratio (%)", min_value=0, max_value=100, value=20)
+distribution_mode = st.sidebar.selectbox("Staking Distribution Mode", ["normal", "kaia_style"])
+
+# Generate staking amounts
+staking_amounts = generate_staking_distribution(vn, spread, mode=distribution_mode)
+staking_amounts.sort()
+
+# Calculate rewards
+df = calc_rewards(staking_amounts, proposer_ratio, vn)
+
+# Show staking distribution chart
+st.write("## Staking Distribution (Tokens)")
+fig0, ax0 = plt.subplots(figsize=(10, 6))
+ax0.bar(range(1, vn+1), staking_amounts)
+ax0.set_xlabel("Validator")
+ax0.set_ylabel("Staking Amount")
+ax0.set_title("Validator Staking Distribution")
+plt.xticks(rotation=90)
+st.pyplot(fig0)
+
+# Show results
 st.write("## Simulation Results")
 st.dataframe(df.style.format({
     "Total Staking": "{:,.0f}",
@@ -78,24 +115,24 @@ st.dataframe(df.style.format({
     "APR (%)": "{:.2f}"
 }))
 
-# APR Graph
-st.write("## Validator APR Comparison")
-fig, ax = plt.subplots(figsize=(10, 6))
+# Show APR per validator
+st.write("## Validator APR (%)")
+fig1, ax1 = plt.subplots(figsize=(10, 6))
 df_sorted = df.sort_values("APR (%)")
-ax.bar(df_sorted["Validator"], df_sorted["APR (%)"])
-ax.set_xlabel("Validator")
-ax.set_ylabel("APR (%)")
-ax.set_title("Validator APR Comparison")
+ax1.bar(df_sorted["Validator"], df_sorted["APR (%)"])
+ax1.set_xlabel("Validator")
+ax1.set_ylabel("APR (%)")
+ax1.set_title("Validator APR (%) Comparison")
 plt.xticks(rotation=90)
-st.pyplot(fig)
+st.pyplot(fig1)
 
-# Network Average APR Change with Proposer:Staker Ratio
-st.write("## Network Average APR Change with Proposer:Staker Ratio")
+# Network average APR by proposer ratio sweeping
+st.write("## Network Average APR by Proposer Ratio")
 ratios = np.linspace(0, 100, 101)
 average_aprs = []
 
 for r in ratios:
-    df_tmp = calc_rewards(staking_amounts, r)
+    df_tmp = calc_rewards(staking_amounts, r, vn)
     average_aprs.append(df_tmp["APR (%)"].mean())
 
 fig2, ax2 = plt.subplots(figsize=(10, 6))
@@ -103,6 +140,6 @@ ax2.plot(ratios, average_aprs, marker='o')
 ax2.axvline(x=proposer_ratio, color='red', linestyle='--', label=f"Current Ratio: {proposer_ratio}%")
 ax2.set_xlabel("Proposer Ratio (%)")
 ax2.set_ylabel("Network Average APR (%)")
-ax2.set_title("Network Average APR Change with Proposer:Staker Ratio")
+ax2.set_title("Network Average APR vs Proposer Ratio")
 ax2.legend()
 st.pyplot(fig2)
