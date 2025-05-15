@@ -24,7 +24,10 @@ def generate_staking_distribution(vn, spread, mode="normal"):
         # Remaining stakers between 5M and 50M (log uniform)
         log_min = np.log10(MIN_STAKE)
         log_max = np.log10(50_000_000)
-        small_stakers = np.power(10, np.random.uniform(log_min, log_max, remaining))
+        small_stakers = np.power(10, np.random.uniform(log_min, log_max, remaining-2))
+
+        # Add 2 5M validators
+        small_stakers = np.concatenate([np.array([5_000_000] * 2), small_stakers])
         
         staking_amounts = np.concatenate([major_stakers, small_stakers])
     else:
