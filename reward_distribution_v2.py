@@ -5,17 +5,18 @@ import matplotlib.pyplot as plt
 
 # Constants
 BLOCKS_PER_SECOND = 1
-REWARD_PER_BLOCK = 4.8
 SECONDS_PER_YEAR = 86400 * 365
-TOTAL_REWARD_PER_YEAR = BLOCKS_PER_SECOND * REWARD_PER_BLOCK * SECONDS_PER_YEAR
 MIN_STAKE = 5_000_000
 MAX_STAKE = 500_000_000
 MAX_TOTAL_STAKE = 3_000_000_000
 
 # Staking distribution function
 def generate_staking_distribution(vn, spread, mode="normal"):
-    if mode == "kaia_style":
-        major_stakers = np.array([564_000_000, 289_000_000, 285_000_000, 135_000_000, 113_000_000, 100_000_000, 65_000_000, 52_000_000])
+    if mode == "kaia_exact_style":
+        staking_amounts = np.array([663_000_000, 289_000_000, 285_000_000, 177_000_000, 135_000_000, 113_000_000, 70_000_000, 63_000_000, 61_000_000, 60_000_000, 54_000_000, 53_000_000, 53_000_000, 48_000_000, 25_000_000, 25_000_000, 25_000_000, 25_000_000, 21_000_000, 21_000_000, 21_000_000, 20_000_000, 20_000_000, 17_000_000, 17_000_000, 14_000_000, 14_000_000, 12_000_000, 12_000_000, 10_000_000, 9_000_000, 9_000_000, 8_000_000, 6_000_000, 5_500_000, 5_000_001, 5_000_001, 5_000_000, 5_000_000, 5_000_000, 5_000_000, 5_000_000])
+
+    elif mode == "kaia_style":
+        major_stakers = np.array([663_000_000, 289_000_000, 285_000_000, 177_000_000, 135_000_000, 113_000_000, 70_000_000, 63_000_000])
         remaining = vn - len(major_stakers)
         if remaining < 0:
             st.error("Number of validators must be at least 8 for Kaia-style mode")
@@ -58,7 +59,8 @@ def generate_staking_distribution(vn, spread, mode="normal"):
     return staking_amounts.astype(int)
 
 # Reward calculation function
-def calc_rewards(staking_amounts, proposer_ratio, vn):
+def calc_rewards(staking_amounts, proposer_ratio, vn, reward_per_block, commission_rate):
+    total_reward_per_year = BLOCKS_PER_SECOND * reward_per_block * SECONDS_PER_YEAR
     effective_stakings = [max(0, s - MIN_STAKE) for s in staking_amounts]
     total_effective_stake = sum(effective_stakings)
 
@@ -66,18 +68,22 @@ def calc_rewards(staking_amounts, proposer_ratio, vn):
     for i, staking in enumerate(staking_amounts):
         effective_stake = max(0, staking - MIN_STAKE)
 
-        proposer_reward = TOTAL_REWARD_PER_YEAR * (proposer_ratio / 100) / vn
-        staker_reward = (TOTAL_REWARD_PER_YEAR * (1 - proposer_ratio / 100) * (effective_stake / total_effective_stake)) if effective_stake > 0 else 0
+        proposer_reward = total_reward_per_year * (proposer_ratio / 100) / vn
+        staker_reward = (total_reward_per_year * (1 - proposer_ratio / 100) * (effective_stake / total_effective_stake)) if effective_stake > 0 else 0
         total_reward = proposer_reward + staker_reward
         apr = (total_reward / staking) * 100
+        proposer_reward_with_commission = MIN_STAKE * apr / 100 + (staking - MIN_STAKE) * apr / 100 * commission_rate / 100
+        user_apr = apr * (100 - commission_rate) / 100
 
         results.append({
             "Validator": f"Validator {i+1}",
             "Total Staking": staking,
             "Proposer Reward": proposer_reward,
             "Staker Reward": staker_reward,
+            "Proposer Reward with Commission": proposer_reward_with_commission,
             "Total Reward": total_reward,
-            "APR (%)": apr
+            "APR (%)": apr,
+            "User APR (%)": user_apr
         })
     df = pd.DataFrame(results)
     return df
@@ -89,14 +95,19 @@ st.sidebar.header("Simulation Parameters")
 vn = st.sidebar.slider("Number of Validators (Vn)", min_value=8, max_value=100, value=20)
 spread = st.sidebar.slider("Staking Distribution Spread (0: Uniform ~ 100: Extreme Bimodal)", min_value=0, max_value=100, value=50)
 proposer_ratio = st.sidebar.slider("Proposer Reward Ratio (%)", min_value=0, max_value=100, value=20)
-distribution_mode = st.sidebar.selectbox("Staking Distribution Mode", ["normal", "kaia_style"])
+commission_rate = st.sidebar.slider("Commission Rate (%)", min_value=0, max_value=100, value=5)
+reward_per_block = st.sidebar.number_input("Reward per Block (KAIA)", min_value=0.1, max_value=100.0, value=4.8, step=0.1)
+distribution_mode = st.sidebar.selectbox("Staking Distribution Mode", ["normal", "kaia_style", "kaia_exact_style"])
 
 # Generate staking amounts
 staking_amounts = generate_staking_distribution(vn, spread, mode=distribution_mode)
+if distribution_mode == "kaia_exact_style":
+    vn = len(staking_amounts)
+
 staking_amounts.sort()
 
 # Calculate rewards
-df = calc_rewards(staking_amounts, proposer_ratio, vn)
+df = calc_rewards(staking_amounts, proposer_ratio, vn, reward_per_block, commission_rate)
 
 # Show staking distribution chart
 st.write("## Staking Distribution (Tokens)")
@@ -114,8 +125,10 @@ st.dataframe(df.style.format({
     "Total Staking": "{:,.0f}",
     "Proposer Reward": "{:,.0f}",
     "Staker Reward": "{:,.0f}",
+    "Proposer Reward with Commission": "{:,.0f}",
     "Total Reward": "{:,.0f}",
-    "APR (%)": "{:.2f}"
+    "APR (%)": "{:.2f}",
+    "User APR (%)": "{:.2f}"
 }))
 
 # Show APR per validator
@@ -135,7 +148,7 @@ ratios = np.linspace(0, 100, 101)
 average_aprs = []
 
 for r in ratios:
-    df_tmp = calc_rewards(staking_amounts, r, vn)
+    df_tmp = calc_rewards(staking_amounts, r, vn, reward_per_block, commission_rate)
     average_aprs.append(df_tmp["APR (%)"].mean())
 
 fig2, ax2 = plt.subplots(figsize=(10, 6))
