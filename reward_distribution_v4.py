@@ -52,12 +52,12 @@ def calc_rewards(staking_amounts, proposer_ratio, vn, reward_per_block, commissi
         results.append({
             "Validator": f"Validator {i+1}",
             "Total Staking": staking,
-            "Proposer Reward": proposer_reward,
-            "Staker Reward": staker_reward,
-            "Proposer Reward with Commission": proposer_reward_with_commission,
-            "Total Reward": total_reward,
+            "Proposer Reward with Commission (PD on)": proposer_reward_with_commission,
+            "Total Reward (PD off)": total_reward,
             "APR (%)": apr,
-            "User APR (%)": user_apr
+            "User APR (%)": user_apr,
+            "Proposer Reward": proposer_reward,
+            "Staker Reward": staker_reward
         })
     df = pd.DataFrame(results)
     return df
@@ -66,7 +66,7 @@ def calc_rewards(staking_amounts, proposer_ratio, vn, reward_per_block, commissi
 st.title("Validator Reward Simulator (Kaia-style & Custom Distribution)")
 
 st.sidebar.header("Simulation Parameters")
-proposer_ratio = st.sidebar.slider("Proposer Reward Ratio (%)", min_value=0, max_value=100, value=20)
+proposer_ratio = 15
 commission_rate = st.sidebar.slider("Commission Rate (%)", min_value=0, max_value=100, value=5)
 reward_per_block = st.sidebar.number_input("Reward per Block (KAIA)", min_value=0.1, max_value=100.0, value=4.8, step=0.1)
 
@@ -88,15 +88,15 @@ plt.xticks(rotation=90)
 st.pyplot(fig0)
 
 # Show results
-st.write("## Simulation Results")
+st.write("## Simulation Results (85% to Staker)")
 st.dataframe(df.style.format({
     "Total Staking": "{:,.0f}",
-    "Proposer Reward": "{:,.0f}",
-    "Staker Reward": "{:,.0f}",
-    "Proposer Reward with Commission": "{:,.0f}",
-    "Total Reward": "{:,.0f}",
+    "Proposer Reward with Commission (PD on)": "{:,.0f}",
+    "Total Reward (PD off)": "{:,.0f}",
     "APR (%)": "{:.2f}",
-    "User APR (%)": "{:.2f}"
+    "User APR (%)": "{:.2f}",
+    "Proposer Reward": "{:,.0f}",
+    "Staker Reward": "{:,.0f}"
 }))
 
 # Show APR per validator
