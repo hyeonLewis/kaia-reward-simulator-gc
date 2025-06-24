@@ -92,10 +92,10 @@ proposer_ratio = 15
 reward_per_block = 4.8
 
 st.sidebar.header("Simulation Parameters")
-commission_rate = st.sidebar.slider("PD Commission Rate (%)", min_value=0, max_value=100, value=5)
 node_idx = st.sidebar.number_input("Select your node id", min_value=1, max_value=100, value=1, step=1) - 1
 simulated_total_staking = st.sidebar.number_input("Simulate your total staking amount", min_value=0, max_value=100_000_000_000, value=5_000_000)
-pd_percentage = st.sidebar.number_input("Adjust PD percentage from your total staking amount", min_value=0, max_value=100, value=0, step=1)
+pd_percentage = st.sidebar.slider("Adjust PD percentage from your total staking amount (%)", min_value=0, max_value=100, value=0)
+commission_rate = st.sidebar.slider("PD Commission Rate (%)", min_value=0, max_value=100, value=5)
 
 # Generate staking amounts
 staking_amounts = cosolidate_staking()
@@ -113,6 +113,57 @@ ax0.set_ylabel("Staking Amount")
 ax0.set_title("Validator Staking Distribution")
 plt.xticks(rotation=90)
 st.pyplot(fig0)
+
+# How-to-use
+st.markdown("## How to Use This Simulator")
+
+with st.expander("Column Explanation", expanded=True):
+    st.markdown("""
+    - **Total Staking**: Total staking amount of the validator
+    - **Current Reward w/ PD**: Reward you will receive with staking reward and PD commission (Assume fixed 5M self staking)
+    - **Current Reward w/o PD**: Reward you will receive without PD commission (Assume all staking is from self staking)
+    - **APR (%)**: Annualized Return on Investment (%)
+    - **User APR (%)**: Annualized Return on Investment (%) for the user (After deducting PD commission)
+    - **Proposer Reward**: Reward from a proposer reward (15%)
+    - **Staker Reward**: Reward from a staker reward (85%)
+    """)
+
+with st.expander("Step-by-Step Guide", expanded=True):
+    st.markdown("""
+    ### Step 1: Identify Your Validator
+    - Look at the staking distribution chart below
+    - Find your validator by matching the total staking amount
+    - Note your validator's position (1, 2, 3, etc.)
+    
+    ### Step 2: Configure Your Simulation
+    - **Node ID**: Select your validator's position from the sidebar
+    - **Total Staking**: Enter your desired total staking amount (in KAIA tokens)
+    - **PD Percentage**: Set your desired PD percentage from your total staking amount (%)
+    - **PD Commission Rate**: Set your desired commission rate percentage
+    
+    ### **Step 3: Analyze Results**
+    - Your selected validator will appear highlighted in **green** at the top
+    - Compare rewards with and without PD adjustments
+    - Review APR calculations and staking distribution
+    """)
+
+st.markdown("### Example Scenario")
+st.info("""
+**Current Situation**: Your validator has 20M KAIA staked  
+        
+**Goal**: Simulate 30M total staking with 10M from PD with 5% commission rate
+        
+**Settings**: 
+- Node ID: Your validator position
+- Total Staking: 30,000,000
+- PD Percentage: 33
+- Commission Rate: 5%
+
+**Result**:
+- Adjusted Reward w/ PD represents the reward you will receive with staking reward and PD commission
+""")
+
+st.markdown("---")
 
 # Show results
 st.write("## Simulation Results (85% to Staker)")
