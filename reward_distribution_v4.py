@@ -36,7 +36,7 @@ def cosolidate_staking():
 def calc_rewards(staking_amounts, proposer_ratio, vn, reward_per_block, commission_rate, node_idx, simulated_total_staking, pd_percentage):  
     total_reward_per_year = BLOCKS_PER_SECOND * reward_per_block * SECONDS_PER_YEAR
 
-    if simulated_total_staking > MIN_STAKE:
+    if simulated_total_staking > MIN_STAKE and node_idx >= 0:
         staking_amounts[node_idx] = simulated_total_staking
 
     effective_stakings = [max(0, s - MIN_STAKE) for s in staking_amounts]
@@ -54,7 +54,7 @@ def calc_rewards(staking_amounts, proposer_ratio, vn, reward_per_block, commissi
         user_apr = apr * (100 - commission_rate) / 100
 
         reward2 = 0
-        if i == node_idx and pd_percentage > 0:
+        if i == node_idx and pd_percentage >= 0:
             reward2 = staking * apr / 100 * (1 - pd_percentage / 100) + staking * apr / 100 * pd_percentage / 100 * commission_rate / 100
 
         common_template = {
@@ -92,7 +92,7 @@ proposer_ratio = 15
 reward_per_block = 4.8
 
 st.sidebar.header("Simulation Parameters")
-node_idx = st.sidebar.number_input("Select your node id", min_value=1, max_value=100, value=1, step=1) - 1
+node_idx = st.sidebar.number_input("Select your node id", min_value=0, max_value=100, value=0, step=1) - 1
 simulated_total_staking = st.sidebar.number_input("Simulate your total staking amount", min_value=0, max_value=100_000_000_000, value=5_000_000)
 pd_percentage = st.sidebar.slider("Adjust PD percentage from your total staking amount (%)", min_value=0, max_value=100, value=0)
 commission_rate = st.sidebar.slider("PD Commission Rate (%)", min_value=0, max_value=100, value=5)
@@ -169,7 +169,7 @@ st.markdown("---")
 st.write("## Simulation Results (85% to Staker)")
 
 # Reorder dataframe to put selected node at the top
-if node_idx < len(df):
+if node_idx >= 0 and node_idx < len(df):
     # Get the selected row
     selected_row = df.iloc[node_idx:node_idx+1]
     # Get all other rows
